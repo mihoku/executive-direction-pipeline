@@ -31,6 +31,8 @@ mimetypes.add_type("audio/m4a", ".m4a") # Override default mapping
 from .models import Unit, MinutesOfMeeting, TaskAssignment
 from .serializers import UnitSerializer, MinutesOfMeetingSerializer, TaskAssignmentSerializer
 
+import math
+from pydub import AudioSegment
 from huggingface_hub import InferenceClient
 from docling.document_converter import DocumentConverter
 

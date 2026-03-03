@@ -6,3 +6,4 @@ edp-venv/
 */__pycache__/
 # Django migrations
 */migrations/
+temp/
