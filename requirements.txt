@@ -1,0 +1,9 @@
+django 
+djangorestframework 
+django-cors-headers
+requests
+python-dotenv
+djangorestframework
+huggingface_hub
+docling
+pydub

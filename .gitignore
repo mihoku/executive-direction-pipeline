@@ -1,0 +1,8 @@
+# virtual environment
+edp-venv/
+# environment variables
+.env
+# cache and logs
+*/__pycache__/
+# Django migrations
+*/migrations/

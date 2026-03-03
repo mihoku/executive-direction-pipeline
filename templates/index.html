@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Direction Pipeline</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Axios (for API calls) -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- Marked.js (Markdown Parser) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Font Awesome for Icons (Optional, but nice for dashboards) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        /* Simple loading spinner */
+        .spinner {
+            border-top-color: #3b82f6; /* Tailwind blue-500 */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px;}
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px;}
+        ::-webkit-scrollbar-thumb { background: #a0aec0; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #718096; }
+        /* Style for preformatted text */
+        pre {
+            white-space: pre-wrap;       /* CSS3 */
+            white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
+            white-space: -pre-wrap;      /* Opera 4-6 */
+            white-space: -o-pre-wrap;    /* Opera 7 */
+            word-wrap: break-word;       /* Internet Explorer 5.5+ */
+        }
+
+        pre, .mom-text-display div {
+            white-space: pre-wrap;      /* CSS3 */
+            word-wrap: break-word;      /* Internet Explorer 5.5+ */
+            /* Apply a base font, prose will override if it can */
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            line-height: 1.6;
+        }
+
+        /* Basic prose styles for summary output */
+        .prose ul { list-style: disc; margin-left: 1.5rem; margin-top: 0.5em; margin-bottom: 0.5em; }
+        .prose ol { list-style: decimal; margin-left: 1.5rem; margin-top: 0.5em; margin-bottom: 0.5em; }
+        .prose li { margin-bottom: 0.5rem; }
+        .prose p { margin-bottom: 0.75em; line-height: 1.6;}
+        .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 { margin-bottom: 0.5em; margin-top: 1em; font-weight: 600; line-height: 1.3;}
+        .prose strong { font-weight: 600; }
+        .prose table { width: 100%; border-collapse: collapse; margin-top: 1em; margin-bottom: 1em;}
+        .prose th, .prose td { border: 1px solid #e2e8f0; padding: 0.5em 0.75em;}
+        .prose thead { background-color: #f7fafc; font-weight: 600;}
+        .prose code { background-color: #f3f4f6; padding: 0.2em 0.4em; font-size: 85%; border-radius: 3px; }
+        .prose pre > code { background-color: transparent; padding: 0; font-size: inherit; border-radius: 0; }
+        .prose blockquote { border-left: 4px solid #e2e8f0; padding-left: 1em; margin-left: 0; margin-right: 0; font-style: italic; color: #6b7280; }
+
+        /* Style for selected tab */
+        .tab-button.active {
+            border-color: #3b82f6; /* blue-500 */
+            color: #3b82f6;
+            background-color: #eff6ff; /* blue-50 */
+            font-weight: 500;
+        }
+        .tab-button {
+            border-color: #d1d5db; /* gray-300 */
+        }
+
+        /* --- Add Style for Highlighting --- */
+        mark {
+            background-color: #fef08a; /* Tailwind yellow-200 */
+            padding: 0.1em 0.2em;
+            border-radius: 3px;
+            box-shadow: 0 0 0 1px #fef08a; /* Optional subtle border */
+        }
+
+        /* Modal Transitions */
+        .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.3s ease; }
+        .modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
+        .modal-scale-enter-active, .modal-scale-leave-active { transition: all 0.3s ease; }
+        .modal-scale-enter-from, .modal-scale-leave-to { opacity: 0; transform: translateY(-20px) scale(0.95); } /* Adjusted scale */
+    </style>
+</head>
+<body class="bg-gray-100 font-sans antialiased">
+
+    {% verbatim %}
+    <div id="app" class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside
+            :class="[
+                sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+                isSidebarCollapsed ? 'md:w-20' : 'md:w-64' // Adjust width on desktop
+            ]"
+            class="bg-gray-900 text-gray-300 flex flex-col fixed inset-y-0 left-0 z-30
+                transform md:translate-x-0 transition-all duration-300 ease-in-out shadow-lg"
+            >
+            <div class="p-5 border-b border-gray-700 flex items-center space-x-3" :class="{ 'justify-center': isSidebarCollapsed }">
+                <i class="fas fa-project-diagram text-blue-400 text-2xl"></i>
+                <h1 class="text-xl font-bold text-white whitespace-nowrap">EDP</h1>
+            </div>
+            <nav class="flex-1 overflow-y-auto pt-4">
+                <a @click.prevent="changeView('dashboard')" href="#"
+                    class="flex items-center p-4 mx-2 rounded-md space-x-3 transition-colors duration-200"
+                    :class="[
+                        currentView === 'dashboard' ? 'bg-blue-600 text-white shadow-inner font-medium' : 'hover:bg-gray-700 hover:text-white',
+                        isSidebarCollapsed ? 'justify-center' : '' // Center icon when collapsed
+                    ]">
+                    <i class="fas fa-tachometer-alt fa-fw w-6 text-center" :class="{'mr-0': isSidebarCollapsed}"></i>
+                    <span :class="{ 'hidden': isSidebarCollapsed }">Dashboard</span>
+                </a>
+                <a @click.prevent="changeView('moms')" href="#"
+                    class="flex items-center p-4 mx-2 rounded-md space-x-3 transition-colors duration-200"
+                    :class="[
+                        (currentView === 'moms' || currentView === 'mom_detail') ? 'bg-blue-600 text-white shadow-inner font-medium' : 'hover:bg-gray-700 hover:text-white',
+                        isSidebarCollapsed ? 'justify-center' : ''
+                    ]">
+                    <i class="fas fa-file-alt fa-fw w-6 text-center" :class="{'mr-0': isSidebarCollapsed}"></i>
+                    <span :class="{ 'hidden': isSidebarCollapsed }">Minutes</span>
+                </a>
+                <a @click.prevent="changeView('units')" href="#"
+                    class="flex items-center p-4 mx-2 rounded-md space-x-3 transition-colors duration-200"
+                    :class="[
+                        currentView === 'units' ? 'bg-blue-600 text-white shadow-inner font-medium' : 'hover:bg-gray-700 hover:text-white',
+                        isSidebarCollapsed ? 'justify-center' : ''
+                    ]">
+                    <i class="fas fa-building fa-fw w-6 text-center" :class="{'mr-0': isSidebarCollapsed}"></i>
+                    <span :class="{ 'hidden': isSidebarCollapsed }">Units</span>
+                </a>
+            </nav>
+
+            <div class="p-4 border-t border-gray-700">
+                <button @click="isSidebarCollapsed = !isSidebarCollapsed"
+                        class="w-full flex items-center justify-center p-2 rounded-md text-gray-400 hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors duration-200">
+                    <!-- Show different icons based on collapsed state -->
+                    <i v-if="!isSidebarCollapsed" class="fas fa-chevron-left fa-fw" title="Collapse Sidebar"></i>
+                    <i v-else class="fas fa-chevron-right fa-fw" title="Expand Sidebar"></i>
+                    <!-- Hide text when collapsed -->
+                    <span class="ml-3" :class="{ 'hidden': isSidebarCollapsed }">Collapse</span>
+                </button>
+            </div>
+
+            <div class="p-4 border-t border-gray-700 text-xs text-gray-500">
+                &copy; {{ new Date().getFullYear() }} Kementerian Keuangan
+            </div>
+        </aside>
+
+        <!-- Sidebar Overlay for Mobile -->
+        <div v-if="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 bg-black opacity-50 z-20 md:hidden"></div>
+
+        <!-- Main Content -->
+        <main :class="isSidebarCollapsed ? 'md:ml-20' : 'md:ml-64'"
+            class="flex-1 flex flex-col h-screen bg-gray-100 transition-all duration-300 ease-in-out">
+            <!-- Top Bar -->
+            <header class="bg-white shadow-md p-4 flex justify-between items-center z-10">
+                 <!-- Hamburger Button (Mobile) -->
+                <button @click.prevent="sidebarOpen = !sidebarOpen" class="md:hidden text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+                    <i class="fas fa-bars fa-lg"></i>
+                </button>
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800">{{ pageTitle }}</h2>
+                <!-- Placeholder for user menu or actions -->
+                <div></div>
+            </header>
+
+            <!-- Content Area -->
+            <div class="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto relative">
+
+                <!-- Global Loading Overlay -->
+                <div v-if="globalLoading" class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
+                    <div class="spinner h-16 w-16 rounded-full border-4 border-t-4 border-gray-200"></div>
+                </div>
+
+                <!-- Dashboard View -->
+                <div v-if="currentView === 'dashboard'" class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                    <h3 class="text-2xl font-semibold mb-4 text-gray-800">Welcome</h3>
+                    <p class="text-gray-600">
+                        Use the sidebar navigation to manage Minutes of Meetings (MoMs), view organizational units,
+                        and leverage AI to generate summaries and extract actionable tasks.
+                    </p>
+                    <!-- Add more dashboard widgets here if needed -->
+                </div>
+
+                <!-- Units View -->
+                <div v-if="currentView === 'units'">
+                    <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                        <h3 class="text-xl font-semibold mb-5 text-gray-800">Organizational Units</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 border">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Abbreviation</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Full Name</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr v-for="unit in units" :key="unit.id" class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ unit.abbreviation }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ unit.name }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-600">{{ unit.description || '-' }}</td>
+                                    </tr>
+                                    <tr v-if="units.length === 0">
+                                        <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500 italic">No units found. Add units via the Django admin interface.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MoM List View -->
+                <div v-if="currentView === 'moms'" class="space-y-6">
+                    <!-- Moved Add New MoM Form to Modal -->
+
+                    <!-- Existing MoMs List -->
+                    <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                         <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
+                             <h3 class="text-xl font-semibold text-gray-800">Existing Minutes</h3>
+                             <!-- Button to open the Add MoM Modal -->
+                             <button @click="showAddMomModal = true" class="mt-2 sm:mt-0 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                 <i class="fas fa-plus mr-2"></i> Add New MoM
+                             </button>
+                         </div>
+                        <ul v-if="moms.length > 0" class="divide-y divide-gray-200">
+                            <li v-for="mom in moms" :key="mom.id" class="py-4 flex flex-col sm:flex-row justify-between sm:items-center space-y-2 sm:space-y-0">
+                                <div>
+                                    <p class="text-lg font-medium text-blue-600 hover:text-blue-800 cursor-pointer hover:underline" @click="selectMom(mom)">{{ mom.title }}</p>
+                                    <p class="text-sm text-gray-500">
+                                        Meeting Date: {{ formatDisplayDate(mom.meeting_date) }} | Created: {{ formatDate(mom.created_at) }}
+                                    </p>
+                                    <span v-if="mom.original_audio_filename" class="ml-2 text-purple-600" title="Created from audio/video file"><i class="fas fa-file-audio mr-1"></i></span>
+                                    <span v-if="mom.original_pdf_filename" class="ml-2 text-red-600" title="Created from PDF file"><i class="fas fa-file-pdf mr-1"></i></span>
+                                </div>
+                                <button @click.prevent="selectMom(mom)" class="px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm border border-gray-300 transition-colors duration-200 self-start sm:self-center">
+                                    View Details <i class="fas fa-chevron-right ml-1 text-xs"></i>
+                                </button>
+                            </li>
+                        </ul>
+                         <div v-else class="py-4 text-center text-sm text-gray-500 italic">
+                            No Minutes of Meetings found. Use the button above to add one.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MoM Detail View -->
+                <div v-if="currentView === 'mom_detail' && selectedMom" class="space-y-6 w-full">
+                    <div>
+                         <button @click.prevent="changeView('moms')" class="text-blue-600 hover:underline text-sm"><i class="fas fa-arrow-left mr-1"></i> Back to all Minutes</button>
+                    </div>
+
+                    <!-- Left Column: MoM Text & Summary -->
+                    <div class="space-y-6">
+                        <!-- MoM Info Section -->
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                            <p class="text-sm text-gray-600 flex flex-wrap items-center gap-x-4 gap-y-2">
+                                <!-- Meeting Date -->
+                                <span><span class="font-semibold">Meeting Date:</span> {{ formatDisplayDate(selectedMom.meeting_date) }}</span>
+
+                                <!-- Transcribed Badge (if filename exists) -->
+                                <span v-if="selectedMom.original_audio_filename" class="text-purple-700 bg-purple-100 px-2 py-0.5 rounded text-xs inline-flex items-center" :title="`Original File: ${selectedMom.original_audio_filename}`">
+                                    <i class="fas fa-file-audio mr-1.5"></i> Transcribed
+                                </span>
+
+                                <a v-if="selectedMom.original_audio_filename" :href="audioFileUrl" :download="selectedMom.original_audio_filename"
+                                class="text-blue-600 hover:text-blue-800 hover:underline text-md inline-flex items-center border border-blue-300 bg-blue-50 px-2 py-0.5 rounded transition-colors duration-200"
+                                title="Download original audio/video file">
+                                    <i class="fas fa-download mr-1.5"></i> Download Original File
+                                </a>
+
+                                <!-- PDF parsed Badge (if filename exists) -->
+                                <span v-if="selectedMom.original_pdf_filename" class="text-red-700 bg-red-100 px-2 py-0.5 rounded text-xs inline-flex items-center" :title="`Original File: ${selectedMom.original_pdf_filename}`">
+                                    <i class="fas fa-file-pdf mr-1.5"></i> From PDF
+                                </span>
+                                <a v-if="selectedMom.original_pdf_filename" :href="pdfFileUrl" :download="selectedMom.original_pdf_filename"
+                                class="text-red-600 hover:text-red-800 hover:underline text-xs inline-flex items-center border border-red-300 bg-red-50 px-2 py-0.5 rounded transition-colors duration-200"
+                                title="Download original PDF file">
+                                    <i class="fas fa-download mr-1.5"></i> Download PDF
+                                </a>
+                            </p>
+                        </div>
+                        <!-- MoM Text -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Left Column: MoM Text & Summary -->
+                            <div class="space-y-6">
+                                <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
+                                    <h3 class="text-lg font-semibold mb-3 text-gray-800">Original MoM Text</h3>
+                                    <!-- MoM Text Display Container -->
+                                    <div ref="momTextContainerRef" @click="clearHighlight"
+                                        class="text-sm text-gray-800 bg-gray-50 p-4 rounded-md border border-gray-200 overflow-y-auto cursor-pointer mom-text-display prose prose-sm max-w-none"
+                                        title="Click to clear highlight">
+                                        <div v-html="displayedMomTextHtml"></div>
+                                    </div>
+                                </div>
+                                <!-- AI Summary -->
+                                <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
+                                    <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 space-y-2 sm:space-y-0">
+                                        <h3 class="text-lg font-semibold text-gray-800">AI Generated Summary</h3>
+                                        <button @click.prevent="generateSummary(selectedMom.id)" :disabled="isSummaryLoading || isTaskLoading" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed self-start sm:self-center min-w-[150px]">
+                                            <i v-if="isSummaryLoading" class="fas fa-spinner fa-spin mr-2"></i>
+                                            {{ isSummaryLoading ? 'Regenerating...' : 'Regenerate Summary' }}
+                                        </button>
+                                    </div>
+                                    <div class="border-t pt-4 mt-4 min-h-[50px]">
+                                        <div v-if="!selectedMom.summary && !isSummaryLoading && !formattedSummary" class="text-sm text-gray-500 italic">No summary generated yet. Click the button to create one.</div>
+                                        <div v-if="isSummaryLoading && !selectedMom.summary" class="text-sm text-blue-600">
+                                            <i class="fas fa-spinner fa-spin mr-2"></i>Generating summary, this may take a moment...
+                                        </div>
+                                        <div v-html="formattedSummary" class="prose prose-sm max-w-none text-gray-800" v-if="formattedSummary"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Right Column: Tasks -->
+                            <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
+                                <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 space-y-2 sm:space-y-0">
+                                    <h3 class="text-lg font-semibold text-gray-800">Extracted Tasks</h3>
+                                    <button @click.prevent="generateTasks(selectedMom.id)" :disabled="isTaskLoading || isSummaryLoading" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed self-start sm:self-center min-w-[190px]">
+                                        <i v-if="isTaskLoading" class="fas fa-spinner fa-spin mr-2"></i>
+                                        {{ isTaskLoading ? 'Extracting...' : 'Extract/Regenerate Tasks' }}
+                                    </button>
+                                </div>
+                                <div class="border-t pt-4 mt-4 min-h-[50px]">
+                                    <div v-if="isTaskLoading && selectedMomTasks.length === 0" class="text-sm text-blue-600">
+                                        <i class="fas fa-spinner fa-spin mr-2"></i>Extracting tasks from MoM using AI, please wait...
+                                    </div>
+                                    <div v-if="!isTaskLoading && selectedMomTasks.length === 0" class="text-sm text-gray-500 italic">No tasks extracted yet. Click the button to find them.</div>
+
+                                    <ul v-if="selectedMomTasks.length > 0" class="space-y-4 overflow-y-auto pr-2 -mr-2"> <!-- Adjusted height to better match left column potentially -->
+                                        <li v-for="task in selectedMomTasks" :key="task.id"
+                                            @click="highlightVerbatim(task.verbatim_sentence)"
+                                            class="border border-gray-200 p-4 rounded-lg bg-gray-50 shadow-sm cursor-pointer hover:bg-yellow-50 transition-colors duration-150">
+                                            <p class="text-gray-800 font-medium text-sm leading-relaxed">{{ task.description }}</p>
+                                            <div v-if="task.assigned_units && task.assigned_units.length > 0" class="mt-3 pt-2 border-t border-gray-200">
+                                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned to:</span>
+                                                <div class="flex flex-wrap gap-2 mt-1">
+                                                    <span v-for="unit in task.assigned_units" :key="unit.id"
+                                                        class="px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold"
+                                                        :title="unit.name + (unit.description ? ' - ' + unit.description : '')">
+                                                        {{ unit.abbreviation }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div v-else class="mt-3 pt-2 border-t border-gray-200">
+                                                <span class="text-xs text-gray-500 italic">No specific unit assigned by AI.</span>
+                                            </div>
+                                            <!-- Optional: Display verbatim snippet for debugging -->
+                                            <!-- <p class="text-xs text-gray-400 mt-2 truncate">Source: {{ task.source_verbatim }}</p> -->
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div> <!-- End Content Area -->
+
+            <!-- Add New MoM Modal -->
+            <transition name="modal-fade">
+                <div v-if="showAddMomModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4" @click.self="closeAddMomModal">
+                    <transition name="modal-scale">
+                        <div v-if="showAddMomModal" class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" @click.stop>
+                            <!-- Modal Header -->
+                            <div class="flex justify-between items-center p-5 border-b sticky top-0 bg-white rounded-t-lg z-10">
+                                <h3 class="text-xl font-semibold text-gray-800">Add New Minutes of Meeting</h3>
+                                <button @click="closeAddMomModal" class="text-gray-400 hover:text-gray-600 focus:outline-none p-1 rounded-full hover:bg-gray-100">
+                                    <i class="fas fa-times fa-lg"></i>
+                                </button>
+                            </div>
+                            <!-- Modal Body / Form -->
+                            <div class="p-6 overflow-y-auto flex-1">
+                                <form id="addMomForm" @submit.prevent="createNewMom" class="space-y-4">
+                                    <!-- Input Mode Selection -->
+                                    <div class="mb-6">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Input Mode</label>
+                                        <div class="flex space-x-4">
+                                            <button type="button" @click="momInputMode = 'manual'"
+                                                    :class="['tab-button px-4 py-2 border rounded-md text-sm font-medium flex items-center', momInputMode === 'manual' ? 'active' : 'text-gray-600 hover:bg-gray-100']">
+                                                <i class="fas fa-keyboard mr-2"></i>Manual Input
+                                            </button>
+                                            <button type="button" @click="momInputMode = 'transcribe'"
+                                                    :class="['tab-button px-4 py-2 border rounded-md text-sm font-medium flex items-center', momInputMode === 'transcribe' ? 'active' : 'text-gray-600 hover:bg-gray-100']">
+                                                 <i class="fas fa-microphone-alt mr-2"></i>Upload & Transcribe
+                                            </button>
+                                            <button type="button" @click="momInputMode = 'pdf'"
+                                                    :class="['tab-button px-4 py-2 border rounded-md text-sm font-medium flex items-center', momInputMode === 'pdf' ? 'active' : 'text-gray-600 hover:bg-gray-100']">
+                                                 <i class="fas fa-file-pdf mr-2"></i>Upload PDF
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Common Fields: Title and Date -->
+                                    <div>
+                                        <label for="modalMomTitle" class="block text-sm font-medium text-gray-700">Title <span class="text-red-500">*</span></label>
+                                        <input v-model.trim="newMom.title" type="text" id="modalMomTitle" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., Q3 Planning Meeting" required>
+                                    </div>
+                                    <div>
+                                        <label for="modalMomDate" class="block text-sm font-medium text-gray-700">Meeting Date <span class="text-red-500">*</span></label>
+                                        <input v-model="newMom.meeting_date" type="date" id="modalMomDate" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" required>
+                                    </div>
+
+                                    <!-- Conditional Input: Text Area or File Upload -->
+                                    <div v-if="momInputMode === 'manual'">
+                                        <label for="modalMomText" class="block text-sm font-medium text-gray-700">MoM Text <span class="text-red-500">*</span></label>
+                                        <textarea v-model.trim="newMom.text" id="modalMomText" rows="10" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Paste your full minutes of meeting text here..." :required="momInputMode === 'manual'"></textarea>
+                                    </div>
+                                    <div v-if="momInputMode === 'transcribe'">
+                                        <label for="modalMomFile" class="block text-sm font-medium text-gray-700">Audio/Video File <span class="text-red-500">*</span></label>
+                                        <input @change="handleFileUpload" ref="fileInputRef" type="file" id="modalMomFile" accept="audio/*,.flac,.mp3,.m4a" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" :required="momInputMode === 'transcribe'">
+                                        <p class="mt-1 text-xs text-gray-500">Upload an audio file (e.g., .flac, .mp3,.m4a).</p>
+                                    </div>
+                                    <div v-if="momInputMode === 'pdf'">
+                                        <label for="modalMomPdfFile" class="block text-sm font-medium text-gray-700">PDF File <span class="text-red-500">*</span></label>
+                                        <input @change="handleFileUpload" ref="fileInputRef" type="file" id="modalMomPdfFile" accept=".pdf,application/pdf" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer" :required="momInputMode === 'pdf'">
+                                        <p class="mt-1 text-xs text-gray-500">Upload a PDF file for text extraction.</p>
+                                    </div>
+                                </form>
+                                 <!-- Transcription Status/Error -->
+                                <div v-if="formStatusMessage" class="mt-4 p-3 rounded-md text-sm border" :class="formError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'">
+                                    <i class="fas mr-2" :class="formError ? 'fa-exclamation-circle' : 'fa-info-circle'"></i>
+                                    {{ formStatusMessage }}
+                                </div>
+                            </div>
+                            <!-- Modal Footer -->
+                            <div class="flex justify-end p-5 border-t bg-gray-50 rounded-b-lg sticky bottom-0 z-10">
+                                <button @click="closeAddMomModal" type="button" class="mr-3 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200">
+                                    Cancel
+                                </button>
+                                <button form="addMomForm" type="submit" :disabled="isLoading" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px]">
+                                    <i v-if="isLoading" class="fas fa-spinner fa-spin mr-2"></i>
+                                     <span v-if="momInputMode === 'manual'">{{ isLoading ? 'Saving...' : 'Save New MoM' }}</span>
+                                    <span v-if="momInputMode === 'transcribe'">{{ isLoading ? 'Processing...' : 'Upload & Create' }}</span>
+                                    <span v-if="momInputMode === 'pdf'">{{ isLoading ? 'Processing...' : 'Upload & Convert' }}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </transition>
+                </div>
+            </transition> <!-- End Add New MoM Modal -->
+
+        </main>
+    </div>
+    {% endverbatim %}
+
+    <script>
+        const { createApp, ref, reactive, onMounted, computed, watch, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                // --- Reactive State ---
+                const currentView = ref('dashboard'); // 'dashboard', 'moms', 'units', 'mom_detail'
+                const moms = ref([]); // Array of MoM objects {id, title, text, summary, created_at}
+                const units = ref([]); // Array of Unit objects {id, name, abbreviation, description}
+                const selectedMomId = ref(null); // ID of the currently viewed MoM
+                const selectedMomTasks = ref([]); // Tasks for the selected MoM
+                const defaultDate = new Date().toISOString().split('T')[0];
+                const newMom = reactive({ title: '', text: '', meeting_date: defaultDate }); // Form data for new MoM
+                const showAddMomModal = ref(false); // Controls the Add MoM modal visibility
+
+                // Loading states
+                const globalLoading = ref(true); // Initial page load spinner
+                const isLoading = ref(false); // Generic loading (e.g., saving new MoM in modal)
+                const isSummaryLoading = ref(false); // Loading state for summary generation
+                const isTaskLoading = ref(false); // Loading state for task extraction
+
+                const sidebarOpen = ref(false); // Mobile state
+                const isSidebarCollapsed = ref(false); // NEW: Desktop collapsed state
+
+                const momInputMode = ref('manual'); // 'manual' or 'transcribe'
+                const selectedFile = ref(null);
+                const transcriptionStatus = ref('');
+                const transcriptionError = ref(false);
+                const fileInputRef = ref(null); // Template ref for file input
+
+                const highlightedVerbatim = ref(null); // NEW: Track highlighted text
+                const momTextContainerRef = ref(null);
+
+                const formStatusMessage = ref(''); // Combined status/error message
+                const formError = ref(false); // Flag for styling
+
+                // --- Computed Properties ---
+                const pageTitle = computed(() => {
+                    // ... (keep the same pageTitle logic) ...
+                     switch(currentView.value) {
+                        case 'dashboard': return 'Executive Direction Pipeline';
+                        case 'moms': return 'Minutes of Meetings';
+                        case 'units': return 'Organizational Units';
+                        case 'mom_detail':
+                            const mom = selectedMom.value;
+                            return mom ? `Details: ${mom.title}` : 'Loading MoM...';
+                        default: return 'Executive Direction Pipeline';
+                    }
+                });
+
+                const selectedMom = computed(() => {
+                    return moms.value.find(m => m.id === selectedMomId.value) || null;
+                });
+
+                const formattedSummary = computed(() => {
+                    if (selectedMom.value && selectedMom.value.summary) {
+                        // Use marked to parse the Markdown summary into HTML
+                        // Marked automatically sanitizes the HTML for security by default
+                        try {
+                            return marked.parse(selectedMom.value.summary);
+                        } catch (e) {
+                            console.error("Error parsing summary Markdown:", e);
+                            return '<p class="text-red-500">Error displaying summary.</p>';
+                        }
+                    }
+                    return ''; // Return empty string if no summary
+                });
+
+                const audioFileUrl = computed(() => {
+                    if (selectedMom.value && selectedMom.value.id && selectedMom.value.original_audio_filename) {
+                        // Construct the URL based on Django's MEDIA_URL setting
+                        // Assumes MEDIA_URL is '/media/' and files are stored in 'mom_audio/<id>/filename'
+                        // Ensure filename is properly encoded for URLs
+                        const filenameEncoded = encodeURIComponent(selectedMom.value.original_audio_filename);
+                        return `/media/mom_audio/${selectedMom.value.id}/${filenameEncoded}`;
+                    }
+                    return '#'; // Return a dummy href if no file exists
+                });
+
+                const pdfFileUrl = computed(() => {
+                    if (selectedMom.value?.id && selectedMom.value.original_pdf_filename) {
+                        const filenameEncoded = encodeURIComponent(selectedMom.value.original_pdf_filename);
+                        // Assumes PDF files are stored in 'mom_pdf/<id>/filename'
+                        return `/media/mom_pdf/${selectedMom.value.id}/${filenameEncoded}`;
+                    } return '#';
+                });
+
+                const displayedMomTextHtml = computed(() => {
+                    const baseText = selectedMom.value?.text;
+                    if (!baseText) return '<p class="italic text-gray-500">No text available.</p>';
+
+                    let textToRender = baseText;
+
+                    if (highlightedVerbatim.value) {
+                        const verbatimToHighlight = highlightedVerbatim.value; // Use the raw stored verbatim
+                        
+                        // Create a regex to escape special characters in the search text
+                        // Use 'g' flag for global replacement (in case verbatim appears multiple times)
+                        const regex = new RegExp(verbatimToHighlight.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
+                        
+                        // We are replacing in the raw text, *before* Markdown parsing
+                        textToRender = baseText.replace(regex, `<mark>${verbatimToHighlight}</mark>`);
+                        
+                        if (textToRender === baseText) {
+                            console.warn("Highlight: Verbatim text not found in MoM text:", verbatimToHighlight);
+                        } else {
+                            console.log("Highlight applied successfully.");
+                        }
+                    }
+
+                    // Now, parse the whole text (with or without <mark> tags) as Markdown
+                    try {
+                        // marked.js is smart enough to treat <mark> as HTML and pass it through
+                        return marked.parse(textToRender);
+                    } catch (e) {
+                        console.error("Error parsing MoM text Markdown:", e);
+                        // Fallback: just return the plain text (escaped)
+                        const escapeHtml = (unsafe) => unsafe?.replace(/&/g, "&amp;")
+                                                            ?.replace(/</g, "&lt;")
+                                                            ?.replace(/>/g, "&gt;")
+                                                            ?.replace(/"/g, "&quot;")
+                                                            ?.replace(/'/g, "&#039;") ?? '';
+                        return escapeHtml(baseText);
+                    }
+                });
+
+                // --- Methods ---
+                
+                // Verbatim Highlighting Methods
+                const highlightVerbatim = async (verbatimSentence) => {
+                    const sentenceToHighlight = verbatimSentence; // Get raw value from task.verbatim_sentence
+                    console.log(verbatimSentence);
+                    if (!sentenceToHighlight || !selectedMom.value?.text) {
+                        console.warn("Highlight cancelled: No verbatim sentence or base MoM text.");
+                        highlightedVerbatim.value = null; return;
+                    }
+                    
+                    // Toggle: If clicking same text, clear highlight
+                    if(sentenceToHighlight === highlightedVerbatim.value){
+                        highlightedVerbatim.value = null; 
+                        console.log("Clearing highlight (toggle).");
+                        return;
+                    }
+
+                    console.log("Highlighting (raw):", sentenceToHighlight);
+                    highlightedVerbatim.value = sentenceToHighlight; // Store RAW version
+
+                    await nextTick(); // Wait for DOM update with <mark>
+
+                    if (momTextContainerRef.value) {
+                        const markElement = momTextContainerRef.value.querySelector('mark');
+                        if (markElement) {
+                            console.log("Scrolling to mark...");
+                            markElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } else {
+                            console.warn("Could not find mark element. Match failed? Check whitespace/normalization.");
+                        }
+                    } else { console.warn("momTextContainerRef not found."); }
+                };
+
+                const clearHighlight = () => {
+                    console.log("Clearing highlight");
+                    highlightedVerbatim.value = null;
+                };
+
+                function getCookie(name) {
+                    // ... (keep the same getCookie logic) ...
+                     let cookieValue = null;
+                    if (document.cookie && document.cookie !== '') {
+                        const cookies = document.cookie.split(';');
+                        for (let i = 0; i < cookies.length; i++) {
+                            const cookie = cookies[i].trim();
+                            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                                break;
+                            }
+                        }
+                    }
+                    return cookieValue;
+                }
+
+                const changeView = (view) => {
+                    currentView.value = view;
+                    if (view !== 'mom_detail') { selectedMomId.value = null; selectedMomTasks.value = []; highlightedVerbatim.value = null; } // Clear highlight on view change
+                    if (window.innerWidth < 768) { sidebarOpen.value = false; }
+                };
+
+                axios.defaults.headers.common['X-CSRFToken'] = getCookie('csrftoken');
+                // axios.defaults.baseURL = 'http://127.0.0.1:8000'; // Uncomment if needed
+
+                const fetchMoms = async () => {
+                   // ... (keep the same fetchMoms logic) ...
+                    try {
+                        const response = await axios.get('/api/moms/');
+                        moms.value = response.data;
+                    } catch (error) {
+                        console.error("Error fetching MoMs:", error);
+                        alert("Error: Could not load Minutes of Meetings. Please check the console or try again later.");
+                    }
+                };
+
+                const fetchUnits = async () => {
+                   // ... (keep the same fetchUnits logic) ...
+                   try {
+                        const response = await axios.get('/api/units/');
+                        units.value = response.data;
+                    } catch (error) {
+                        console.error("Error fetching Units:", error);
+                    }
+                };
+                
+                const openAddMomModal = () => {
+                    newMom.title = '';
+                    newMom.text = '';
+                    newMom.meeting_date = defaultDate;
+                    selectedFile.value = null;
+                    momInputMode.value = 'manual';
+                    formStatusMessage.value = ''; // Use combined status
+                    formError.value = false;      // Use combined error flag
+                    if (fileInputRef.value) { fileInputRef.value.value = ''; }
+                    showAddMomModal.value = true;
+                };
+
+                const closeAddMomModal = () => { showAddMomModal.value = false; };
+
+                const handleFileUpload = (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        selectedFile.value = file;
+                        let fileType = '';
+                        if (momInputMode.value === 'transcribe') fileType = 'Audio/Video';
+                        else if (momInputMode.value === 'pdf') fileType = 'PDF';
+                        
+                        formStatusMessage.value = `Selected ${fileType} file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                        formError.value = false;
+                    } else {
+                        selectedFile.value = null;
+                        formStatusMessage.value = '';
+                    }
+                };
+
+                const formatDisplayDate = (dateString) => {
+                    if (!dateString) return 'N/A';
+                    try {
+                        const [year, month, day] = dateString.split('-');
+                        const dateObj = new Date(year, month - 1, day); // Month is 0-indexed
+                        return dateObj.toLocaleDateString(undefined, {
+                            year: 'numeric', month: 'long', day: 'numeric'
+                        });
+                    } catch (e) { return dateString; }
+                };
+                
+                // Handles both manual and transcription submission
+                const createNewMom = async () => {
+                    if (!newMom.title || !newMom.meeting_date) {
+                        alert("Please provide both a title and a meeting date.");
+                        return;
+                    }
+                    isLoading.value = true;
+                    formStatusMessage.value = ""; // Clear status
+                    formError.value = false;
+
+                    try {
+                        let response;
+                        let endpoint = '';
+                        let payload = {};
+                        let headers = { 'Content-Type': 'application/json' };
+
+                        if (momInputMode.value === 'manual') {
+                            if (!newMom.text) { throw new Error("Please provide the MoM text for manual input."); }
+                            endpoint = '/api/moms/';
+                            payload = { title: newMom.title, text: newMom.text, meeting_date: newMom.meeting_date };
+                            console.log("Submitting manual MoM...");
+                        } else {
+                            if (!selectedFile.value) { throw new Error(`Please select a file to upload.`); }
+                            const formData = new FormData();
+                            formData.append('title', newMom.title);
+                            formData.append('meeting_date', newMom.meeting_date);
+                            headers = { 'Content-Type': 'multipart/form-data' };
+                            payload = formData;
+
+                            if (momInputMode.value === 'transcribe') {
+                                endpoint = '/api/moms/transcribe/';
+                                formData.append('audio_file', selectedFile.value);
+                                formStatusMessage.value = 'Uploading & Transcribing... Please wait.';
+                                console.log("Submitting audio for transcription...");
+                            } else if (momInputMode.value === 'pdf') {
+                                endpoint = '/api/moms/convert-pdf/';
+                                formData.append('pdf_file', selectedFile.value);
+                                formStatusMessage.value = 'Uploading & Converting PDF... Please wait.';
+                                console.log("Submitting PDF for conversion...");
+                            } else {
+                                throw new Error("Invalid input mode.");
+                            }
+                        }
+
+                        response = await axios.post(endpoint, payload, { headers: headers });
+                        console.log("MoM creation successful:", response.data);
+
+                        moms.value.unshift(response.data); // Add to list
+                        closeAddMomModal(); // Close modal
+
+                    } catch (error) {
+                        console.error(`Error creating MoM via ${momInputMode.value}:`, error);
+                        let errorMsg = "An unexpected error occurred.";
+                        if (error.response) {
+                            console.error("Error Data:", error.response.data);
+                            errorMsg = error.response.data?.error || `Server error ${error.response.status}.`;
+                        } else if (error.request) {
+                            console.error("Error Request:", error.request);
+                            errorMsg = "No server response. Check connection or server status.";
+                        } else {
+                            errorMsg = error.message;
+                        }
+                        // Show error in modal
+                        formStatusMessage.value = `Error: ${errorMsg}`;
+                        formError.value = true;
+                    } finally {
+                        isLoading.value = false; // Stop loading
+                    }
+                };
+
+                const selectMom = (mom) => {
+                    selectedMomId.value = mom.id;
+                    highlightedVerbatim.value = null; // Clear highlight when selecting new MoM
+                    fetchTasksForMom(mom.id);
+                    changeView('mom_detail');
+                };
+
+                const fetchTasksForMom = async (momId) => {
+                   // ... (keep the same fetchTasksForMom logic) ...
+                   if (!momId) return;
+                    try {
+                        const response = await axios.get(`/api/moms/${momId}/tasks/`);
+                        selectedMomTasks.value = response.data;
+                    } catch (error) {
+                        console.error(`Error fetching tasks for MoM ${momId}:`, error);
+                        selectedMomTasks.value = [];
+                    }
+                };
+
+                const generateSummary = async (momId) => {
+                   // ... (keep the same generateSummary logic) ...
+                    isSummaryLoading.value = true;
+                    try {
+                        const response = await axios.post(`/api/moms/${momId}/generate-summary/`);
+                        const index = moms.value.findIndex(m => m.id === momId);
+                        if (index !== -1) {
+                            moms.value[index].summary = response.data.summary;
+                        }
+                    } catch (error) {
+                        console.error("Error generating summary:", error.response?.data || error.message);
+                        alert(`Failed to generate summary: ${error.response?.data?.error || error.message}`);
+                    } finally {
+                        isSummaryLoading.value = false;
+                    }
+                };
+
+                const generateTasks = async (momId) => {
+                    // ... (keep the same generateTasks logic) ...
+                     isTaskLoading.value = true;
+                    selectedMomTasks.value = [];
+                    try {
+                        const response = await axios.post(`/api/moms/${momId}/extract-tasks/`);
+                        selectedMomTasks.value = response.data;
+                    } catch (error) {
+                        console.error("Error extracting tasks:", error.response?.data || error.message);
+                         alert(`Failed to extract tasks: ${error.response?.data?.error || 'Check server logs for details.'}`);
+                    } finally {
+                        isTaskLoading.value = false;
+                    }
+                };
+
+                const formatDate = (isoString) => {
+                   // ... (keep the same formatDate logic) ...
+                    if (!isoString) return 'N/A';
+                    try {
+                        return new Date(isoString).toLocaleString(undefined, {
+                            dateStyle: 'medium',
+                            timeStyle: 'short'
+                        });
+                    } catch (e) {
+                        return isoString; // Fallback
+                    }
+                };
+
+                // --- Lifecycle Hook ---
+                onMounted(async () => {
+                   // ... (keep the same onMounted logic) ...
+                     globalLoading.value = true;
+                    await Promise.all([
+                        fetchMoms(),
+                        fetchUnits()
+                    ]);
+                    globalLoading.value = false;
+                });
+
+                // --- Return state and methods to the template ---
+                return {
+                    currentView,
+                    moms,
+                    units,
+                    selectedMomId,
+                    selectedMomTasks,
+                    newMom,
+                    showAddMomModal, // <<< Expose modal state
+                    globalLoading,
+                    isLoading,
+                    isSummaryLoading,
+                    isTaskLoading,
+                    sidebarOpen,
+                    pageTitle,
+                    selectedMom,
+                    momInputMode, selectedFile, transcriptionStatus, transcriptionError,
+                    fileInputRef,
+                    formatDisplayDate, 
+                    formattedSummary, 
+                    audioFileUrl, 
+                    pdfFileUrl, // computed property
+                    changeView,
+                    openAddMomModal, closeAddMomModal, handleFileUpload, 
+                    createNewMom,
+                    selectMom,
+                    generateSummary,
+                    generateTasks,
+                    formatDate,
+                    isSidebarCollapsed,
+                    highlightedVerbatim, 
+                    momTextContainerRef, 
+                    displayedMomTextHtml, 
+                    highlightVerbatim, 
+                    clearHighlight,
+                };
+            }
+        }).mount('#app');
+    </script>
+
+</body>
+</html>
+

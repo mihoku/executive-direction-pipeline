@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Direction Pipeline</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Axios (for API calls) -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- Font Awesome for Icons (Optional, but nice for dashboards) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        /* Simple loading spinner */
+        .spinner {
+            border-top-color: #3b82f6; /* Tailwind blue-500 */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px;}
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px;}
+        ::-webkit-scrollbar-thumb { background: #a0aec0; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #718096; }
+        /* Style for preformatted text */
+        pre {
+            white-space: pre-wrap;       /* CSS3 */
+            white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
+            white-space: -pre-wrap;      /* Opera 4-6 */
+            white-space: -o-pre-wrap;    /* Opera 7 */
+            word-wrap: break-word;       /* Internet Explorer 5.5+ */
+        }
+        /* Basic prose styles for summary output */
+        .prose ul { list-style: disc; margin-left: 1.5rem; }
+        .prose li { margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans antialiased">
+
+    <div id="app" class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside
+            :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+            class="w-64 bg-gray-900 text-gray-300 flex flex-col fixed inset-y-0 left-0 z-30 transform md:translate-x-0 transition-transform duration-300 ease-in-out shadow-lg"
+        >
+            <div class="p-5 border-b border-gray-700 flex items-center space-x-3">
+                <i class="fas fa-project-diagram text-blue-400 text-2xl"></i>
+                <h1 class="text-xl font-bold text-white whitespace-nowrap">Exec Pipeline</h1>
+            </div>
+            <nav class="flex-1 overflow-y-auto pt-4">
+                <a @click.prevent="changeView('dashboard')" href="#"
+                   class="flex items-center p-4 mx-2 rounded-md space-x-3 hover:bg-gray-700 hover:text-white transition-colors duration-200"
+                   :class="{ 'bg-blue-600 text-white shadow-inner': currentView === 'dashboard' }">
+                    <i class="fas fa-tachometer-alt fa-fw w-6 text-center"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a @click.prevent="changeView('moms')" href="#"
+                   class="flex items-center p-4 mx-2 rounded-md space-x-3 hover:bg-gray-700 hover:text-white transition-colors duration-200"
+                   :class="{ 'bg-blue-600 text-white shadow-inner': currentView === 'moms' || currentView === 'mom_detail' }">
+                   <i class="fas fa-file-alt fa-fw w-6 text-center"></i>
+                    <span>Minutes</span>
+                </a>
+                <a @click.prevent="changeView('units')" href="#"
+                   class="flex items-center p-4 mx-2 rounded-md space-x-3 hover:bg-gray-700 hover:text-white transition-colors duration-200"
+                   :class="{ 'bg-blue-600 text-white shadow-inner': currentView === 'units' }">
+                    <i class="fas fa-building fa-fw w-6 text-center"></i>
+                    <span>Units</span>
+                </a>
+            </nav>
+            <div class="p-4 border-t border-gray-700 text-xs text-gray-500">
+                &copy; {% verbatim %}{{ new Date().getFullYear() }}{% endverbatim %} Kementerian Keuangan
+            </div>
+        </aside>
+
+        <!-- Sidebar Overlay for Mobile -->
+        <div v-if="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 bg-black opacity-50 z-20 md:hidden"></div>
+
+        <!-- Main Content -->
+        <main class="flex-1 md:ml-64 flex flex-col h-screen">
+            <!-- Top Bar -->
+            <header class="bg-white shadow-md p-4 flex justify-between items-center z-10">
+                 <!-- Hamburger Button (Mobile) -->
+                <button @click.prevent="sidebarOpen = !sidebarOpen" class="md:hidden text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+                    <i class="fas fa-bars fa-lg"></i>
+                </button>
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800">{{ pageTitle }}</h2>
+                <!-- Placeholder for user menu or actions -->
+                <div></div>
+            </header>
+
+            <!-- Content Area -->
+            <div class="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto relative">
+
+                <!-- Global Loading Overlay -->
+                <div v-if="globalLoading" class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
+                    <div class="spinner h-16 w-16 rounded-full border-4 border-t-4 border-gray-200"></div>
+                </div>
+
+                <!-- Dashboard View -->
+                <div v-if="currentView === 'dashboard'" class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                    <h3 class="text-2xl font-semibold mb-4 text-gray-800">Welcome</h3>
+                    <p class="text-gray-600">
+                        Use the sidebar navigation to manage Minutes of Meetings (MoMs), view organizational units,
+                        and leverage AI to generate summaries and extract actionable tasks.
+                    </p>
+                    <!-- Add more dashboard widgets here if needed -->
+                </div>
+
+                <!-- Units View -->
+                <div v-if="currentView === 'units'">
+                    <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                        <h3 class="text-xl font-semibold mb-5 text-gray-800">Organizational Units</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 border">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Abbreviation</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Full Name</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr v-for="unit in units" :key="unit.id" class="hover:bg-gray-50">
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{% verbatim %}{{ unit.abbreviation }}{% endverbatim %}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{% verbatim %}{{ unit.name }}{% endverbatim %}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-600">{% verbatim %}{{ unit.description || '-' }}{% endverbatim %}</td>
+                                    </tr>
+                                    <tr v-if="units.length === 0">
+                                        <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500 italic">No units found. Add units via the Django admin interface.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MoM List View -->
+                <div v-if="currentView === 'moms'" class="space-y-6">
+                    <!-- Add New MoM Form -->
+                    <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                        <h3 class="text-xl font-semibold mb-4 text-gray-800">Add New Minutes of Meeting</h3>
+                        <form @submit.prevent="createNewMom" class="space-y-4">
+                            <div>
+                                <label for="momTitle" class="block text-sm font-medium text-gray-700">Title <span class="text-red-500">*</span></label>
+                                <input v-model.trim="newMom.title" type="text" id="momTitle" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., Q3 Planning Meeting" required>
+                            </div>
+                            <div>
+                                <label for="momText" class="block text-sm font-medium text-gray-700">MoM Text <span class="text-red-500">*</span></label>
+                                <textarea v-model.trim="newMom.text" id="momText" rows="10" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Paste your full minutes of meeting text here..." required></textarea>
+                            </div>
+                            <div class="flex justify-end">
+                                <button type="submit" :disabled="isLoading" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i v-if="isLoading" class="fas fa-spinner fa-spin mr-2"></i>
+                                    {% verbatim %}{{ isLoading ? 'Saving...' : 'Save New MoM' }}{% endverbatim %}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Existing MoMs List -->
+                    <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                        <h3 class="text-xl font-semibold mb-4 text-gray-800">Existing Minutes</h3>
+                        <ul v-if="moms.length > 0" class="divide-y divide-gray-200">
+                            <li v-for="mom in moms" :key="mom.id" class="py-4 flex flex-col sm:flex-row justify-between sm:items-center space-y-2 sm:space-y-0">
+                                <div>
+                                    <p class="text-lg font-medium text-blue-600 hover:text-blue-500 cursor-pointer hover:underline" @click="selectMom(mom)">{% verbatim %}{{ mom.title }}{% endverbatim %}</p>
+                                    <p class="text-sm text-gray-500">Created: {% verbatim %}{{ formatDate(mom.created_at) }}{% endverbatim %}</p>
+                                </div>
+                                <button @click.prevent="selectMom(mom)" class="px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm border border-gray-300 transition-colors duration-200 self-start sm:self-center">
+                                    View Details <i class="fas fa-chevron-right ml-1 text-xs"></i>
+                                </button>
+                            </li>
+                        </ul>
+                         <div v-else class="py-4 text-center text-sm text-gray-500 italic">
+                            No Minutes of Meetings found. Use the form above to add one.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MoM Detail View -->
+                <div v-if="currentView === 'mom_detail' && selectedMom" class="space-y-6">
+                    <div>
+                         <button @click.prevent="changeView('moms')" class="text-blue-600 hover:underline text-sm"><i class="fas fa-arrow-left mr-1"></i> Back to all Minutes</button>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            <!-- Left Column: MoM Text & Summary -->
+                            <div class="space-y-6">
+                                <!-- MoM Text -->
+                                <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                                    <h3 class="text-lg font-semibold mb-3 text-gray-800">Original MoM Text</h3>
+                                    <div class="text-sm text-gray-800 bg-gray-50 p-4 rounded-md border border-gray-200 overflow-y-auto max-h-[40vh]">
+                                        <pre class="font-sans leading-relaxed">{% verbatim %}{{ selectedMom.text }}{% endverbatim %}</pre>
+                                    </div>
+                                </div>
+                                <!-- AI Summary -->
+                                <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                                    <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 space-y-2 sm:space-y-0">
+                                        <h3 class="text-lg font-semibold text-gray-800">AI Generated Summary</h3>
+                                        <button @click.prevent="generateSummary(selectedMom.id)" :disabled="isSummaryLoading || isTaskLoading" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed self-start sm:self-center">
+                                            <i v-if="isSummaryLoading" class="fas fa-spinner fa-spin mr-2"></i>
+                                            {% verbatim %}{{ isSummaryLoading ? 'Regenerating...' : 'Regenerate Summary' }}{% endverbatim %}
+                                        </button>
+                                    </div>
+                                    <div v-if="!selectedMom.summary && !isSummaryLoading" class="text-sm text-gray-500 italic border-t pt-4">No summary generated yet. Click the button to create one.</div>
+                                    <div v-if="isSummaryLoading && !selectedMom.summary" class="text-sm text-blue-600 border-t pt-4">
+                                        <i class="fas fa-spinner fa-spin mr-2"></i>Generating summary, this may take a moment...
+                                    </div>
+                                    <div v-html="selectedMom.summary" class="prose prose-sm max-w-none text-gray-800 border-t pt-4 mt-4" v-if="selectedMom.summary"></div>
+                                </div>
+                            </div>
+
+                            <!-- Right Column: Tasks -->
+                            <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+                                <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 space-y-2 sm:space-y-0">
+                                    <h3 class="text-lg font-semibold text-gray-800">Extracted Tasks</h3>
+                                    <button @click.prevent="generateTasks(selectedMom.id)" :disabled="isTaskLoading || isSummaryLoading" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed self-start sm:self-center">
+                                        <i v-if="isTaskLoading" class="fas fa-spinner fa-spin mr-2"></i>
+                                        {% verbatim %}{{ isTaskLoading ? 'Extracting...' : 'Extract/Regenerate Tasks' }} {% endverbatim %}
+                                    </button>
+                                </div>
+                                <div class="border-t pt-4">
+                                    <div v-if="isTaskLoading && selectedMomTasks.length === 0" class="text-sm text-blue-600">
+                                        <i class="fas fa-spinner fa-spin mr-2"></i>Extracting tasks from MoM using AI, please wait...
+                                    </div>
+                                    <div v-if="!isTaskLoading && selectedMomTasks.length === 0" class="text-sm text-gray-500 italic">No tasks extracted yet. Click the button to find them.</div>
+
+                                    <ul v-if="selectedMomTasks.length > 0" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                                        <li v-for="task in selectedMomTasks" :key="task.id" class="border border-gray-200 p-4 rounded-lg bg-gray-50 shadow-sm">
+                                            <p class="text-gray-800 font-medium text-sm leading-relaxed">{{ task.description }}</p>
+                                            <div v-if="task.assigned_units && task.assigned_units.length > 0" class="mt-3 pt-2 border-t border-gray-200">
+                                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned to:</span>
+                                                <div class="flex flex-wrap gap-2 mt-1">
+                                                    <span v-for="unit in task.assigned_units" :key="unit.id"
+                                                        class="px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold"
+                                                        :title="unit.name + (unit.description ? ' - ' + unit.description : '')">
+                                                        {{ unit.abbreviation }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div v-else class="mt-3 pt-2 border-t border-gray-200">
+                                                <span class="text-xs text-gray-500 italic">No specific unit assigned by AI.</span>
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div> <!-- End Content Area -->
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, onMounted, computed, watch } = Vue;
+
+        createApp({
+            setup() {
+                // --- Reactive State ---
+                const currentView = ref('dashboard'); // 'dashboard', 'moms', 'units', 'mom_detail'
+                const moms = ref([]); // Array of MoM objects {id, title, text, summary, created_at}
+                const units = ref([]); // Array of Unit objects {id, name, abbreviation, description}
+                const selectedMomId = ref(null); // ID of the currently viewed MoM
+                const selectedMomTasks = ref([]); // Tasks for the selected MoM
+                const newMom = reactive({ title: '', text: '' }); // Form data for new MoM
+
+                // Loading states
+                const globalLoading = ref(true); // Initial page load spinner
+                const isLoading = ref(false); // Generic loading (e.g., saving new MoM)
+                const isSummaryLoading = ref(false); // Loading state for summary generation
+                const isTaskLoading = ref(false); // Loading state for task extraction
+
+                const sidebarOpen = ref(false); // Sidebar state for mobile
+
+                // --- Computed Properties ---
+                const pageTitle = computed(() => {
+                    switch(currentView.value) {
+                        case 'dashboard': return 'Dashboard Overview';
+                        case 'moms': return 'Minutes of Meetings';
+                        case 'units': return 'Organizational Units';
+                        case 'mom_detail':
+                            const mom = selectedMom.value;
+                            return mom ? `Details: ${mom.title}` : 'Loading MoM...';
+                        default: return 'Dashboard';
+                    }
+                });
+
+                // Finds the full MoM object based on selectedMomId
+                const selectedMom = computed(() => {
+                    return moms.value.find(m => m.id === selectedMomId.value) || null;
+                });
+
+                // --- Methods ---
+
+                // Helper to get CSRF token from cookies (Needed for Django POST/PUT/DELETE)
+                function getCookie(name) {
+                    let cookieValue = null;
+                    if (document.cookie && document.cookie !== '') {
+                        const cookies = document.cookie.split(';');
+                        for (let i = 0; i < cookies.length; i++) {
+                            const cookie = cookies[i].trim();
+                            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                                break;
+                            }
+                        }
+                    }
+                    return cookieValue;
+                }
+
+                // Set CSRF token for all Axios requests
+                axios.defaults.headers.common['X-CSRFToken'] = getCookie('csrftoken');
+                // Set default base URL if your API isn't served from the same origin
+                // axios.defaults.baseURL = 'http://127.0.0.1:8000'; // Uncomment if needed
+
+                // Change the currently displayed view
+                const changeView = (view) => {
+                    currentView.value = view;
+                    if (view !== 'mom_detail') {
+                        selectedMomId.value = null; // Clear selection when leaving detail view
+                        selectedMomTasks.value = [];
+                    }
+                     // Close sidebar on navigation in mobile
+                    if (window.innerWidth < 768) {
+                        sidebarOpen.value = false;
+                    }
+                };
+
+                // Fetch all MoMs from the backend
+                const fetchMoms = async () => {
+                    try {
+                        const response = await axios.get('/api/moms/');
+                        moms.value = response.data;
+                    } catch (error) {
+                        console.error("Error fetching MoMs:", error);
+                        // Add user-friendly error handling here (e.g., show a toast message)
+                        alert("Error: Could not load Minutes of Meetings. Please check the console or try again later.");
+                    }
+                };
+
+                // Fetch all Units from the backend
+                const fetchUnits = async () => {
+                    try {
+                        const response = await axios.get('/api/units/');
+                        units.value = response.data;
+                    } catch (error) {
+                        console.error("Error fetching Units:", error);
+                        // Less critical, maybe just log it
+                    }
+                };
+
+                // Create a new MoM via the API
+                const createNewMom = async () => {
+                    if (!newMom.title || !newMom.text) {
+                        alert("Please provide both a title and the MoM text.");
+                        return;
+                    }
+                    isLoading.value = true;
+                    try {
+                        // Use FormData if sending files, otherwise JSON is fine
+                        const response = await axios.post('/api/moms/', {
+                            title: newMom.title,
+                            text: newMom.text
+                        });
+                        moms.value.unshift(response.data); // Add new MoM to the beginning of the list
+                        newMom.title = ''; // Reset form
+                        newMom.text = '';
+                         // Optionally, show a success message
+                    } catch (error) {
+                        console.error("Error creating MoM:", error.response?.data || error.message);
+                        alert(`Failed to save new MoM: ${error.response?.data?.error || error.message}`);
+                    } finally {
+                        isLoading.value = false;
+                    }
+                };
+
+                // Select a MoM to view details
+                const selectMom = (mom) => {
+                    selectedMomId.value = mom.id;
+                    fetchTasksForMom(mom.id); // Fetch tasks when MoM is selected
+                    changeView('mom_detail');
+                };
+
+                // Fetch tasks for the currently selected MoM
+                const fetchTasksForMom = async (momId) => {
+                    if (!momId) return;
+                    // Don't set loading state here unless it's the *initial* load for the detail view
+                    try {
+                        const response = await axios.get(`/api/moms/${momId}/tasks/`);
+                        selectedMomTasks.value = response.data;
+                    } catch (error) {
+                        console.error(`Error fetching tasks for MoM ${momId}:`, error);
+                        selectedMomTasks.value = []; // Clear tasks on error
+                        // Maybe show an error message
+                    }
+                };
+
+                // Trigger AI summary generation for a MoM
+                const generateSummary = async (momId) => {
+                    isSummaryLoading.value = true;
+                    try {
+                        const response = await axios.post(`/api/moms/${momId}/generate-summary/`);
+                        // Update the summary in the local 'moms' array for reactivity
+                        const index = moms.value.findIndex(m => m.id === momId);
+                        if (index !== -1) {
+                            // Vue 3 Proxy Magic: Direct assignment works!
+                            moms.value[index].summary = response.data.summary;
+                        }
+                    } catch (error) {
+                        console.error("Error generating summary:", error.response?.data || error.message);
+                        alert(`Failed to generate summary: ${error.response?.data?.error || error.message}`);
+                    } finally {
+                        isSummaryLoading.value = false;
+                    }
+                };
+
+                // Trigger AI task extraction for a MoM
+                const generateTasks = async (momId) => {
+                    isTaskLoading.value = true;
+                    selectedMomTasks.value = []; // Clear existing tasks immediately for better UX
+                    try {
+                        // The API returns the list of newly created/extracted tasks
+                        const response = await axios.post(`/api/moms/${momId}/extract-tasks/`);
+                        selectedMomTasks.value = response.data;
+                    } catch (error) {
+                        console.error("Error extracting tasks:", error.response?.data || error.message);
+                         alert(`Failed to extract tasks: ${error.response?.data?.error || 'Check server logs for details.'}`);
+                    } finally {
+                        isTaskLoading.value = false;
+                    }
+                };
+
+                 // Helper function for formatting dates
+                const formatDate = (isoString) => {
+                    if (!isoString) return 'N/A';
+                    try {
+                        return new Date(isoString).toLocaleString(undefined, {
+                            dateStyle: 'medium',
+                            timeStyle: 'short'
+                        });
+                    } catch (e) {
+                        return isoString; // Fallback
+                    }
+                };
+
+
+                // --- Lifecycle Hook ---
+                // Runs once when the app is first mounted
+                onMounted(async () => {
+                    globalLoading.value = true;
+                    // Fetch initial data needed for the dashboard
+                    await Promise.all([
+                        fetchMoms(),
+                        fetchUnits()
+                    ]);
+                    globalLoading.value = false; // Hide global spinner once initial data is loaded
+                });
+
+                // --- Return state and methods to the template ---
+                return {
+                    currentView,
+                    moms,
+                    units,
+                    selectedMomId,
+                    selectedMomTasks,
+                    newMom,
+                    globalLoading,
+                    isLoading,
+                    isSummaryLoading,
+                    isTaskLoading,
+                    sidebarOpen,
+                    pageTitle,
+                    selectedMom, // computed property
+                    changeView,
+                    createNewMom,
+                    selectMom,
+                    generateSummary,
+                    generateTasks,
+                    formatDate
+                };
+            }
+        }).mount('#app');
+    </script>
+
+</body>
+</html>
+
