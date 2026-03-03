@@ -7,3 +7,6 @@ edp-venv/
 # Django migrations
 */migrations/
 temp/
+*/mom_audio/
+*/mom_pdf/
+*.sqlite3
