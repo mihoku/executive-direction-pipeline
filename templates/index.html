@@ -409,8 +409,8 @@
                                     </div>
                                     <div v-if="momInputMode === 'transcribe'">
                                         <label for="modalMomFile" class="block text-sm font-medium text-gray-700">Audio/Video File <span class="text-red-500">*</span></label>
-                                        <input @change="handleFileUpload" ref="fileInputRef" type="file" id="modalMomFile" accept="audio/*,.flac,.mp3,.m4a" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" :required="momInputMode === 'transcribe'">
-                                        <p class="mt-1 text-xs text-gray-500">Upload an audio file (e.g., .flac, .mp3,.m4a).</p>
+                                        <input @change="handleFileUpload" ref="fileInputRef" type="file" id="modalMomFile" accept="audio/*,video/*,.flac,.mp3,.m4a,.wav,.mp4,.webm,.mpeg" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" :required="momInputMode === 'transcribe'">
+                                        <p class="mt-1 text-xs text-gray-500">Upload an audio/video file (e.g., .flac, .mp3, .m4a, .mp4).</p>
                                     </div>
                                     <div v-if="momInputMode === 'pdf'">
                                         <label for="modalMomPdfFile" class="block text-sm font-medium text-gray-700">PDF File <span class="text-red-500">*</span></label>

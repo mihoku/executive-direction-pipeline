@@ -9,4 +9,4 @@ edp-venv/
 temp/
 */mom_audio/
 */mom_pdf/
-*.sqlite3
+db.sqlite3
